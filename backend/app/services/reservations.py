@@ -2,16 +2,22 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Dict, Any, List
 
-async def calculate_monthly_revenue(property_id: str, month: int, year: int, db_session=None) -> Decimal:
+async def calculate_monthly_revenue(property_id: str, month: int, year: int, property_timezone: str, db_session=None) -> Decimal:
     """
     Calculates revenue for a specific month.
     """
 
-    start_date = datetime(year, month, 1)
+    tz = ZoneInfo(property_timezone)
+
+    start_local = datetime(year, month, 1, 0, 0, 0, tzinfo=tz)
+
     if month < 12:
-        end_date = datetime(year, month + 1, 1)
+        end_local = datetime(year, month + 1, 1, 0, 0, 0, tzinfo=tz)
     else:
-        end_date = datetime(year + 1, 1, 1)
+        end_local = datetime(year + 1, 1, 1, 0, 0, 0, tzinfo=tz)
+
+    start_date = start_local.astimezone(ZoneInfo("UTC"))
+    end_date = end_local.astimezone(ZoneInfo("UTC"))
         
     print(f"DEBUG: Querying revenue for {property_id} from {start_date} to {end_date}")
 
@@ -51,7 +57,7 @@ async def calculate_total_revenue(property_id: str, tenant_id: str) -> Dict[str,
                 query = text("""
                     SELECT 
                         property_id,
-                        SUM(total_amount) as total_revenue,
+                        SUM(total_amount)::numeric(10,3) as total_revenue,
                         COUNT(*) as reservation_count
                     FROM reservations 
                     WHERE property_id = :property_id AND tenant_id = :tenant_id
@@ -65,7 +71,7 @@ async def calculate_total_revenue(property_id: str, tenant_id: str) -> Dict[str,
                 row = result.fetchone()
                 
                 if row:
-                    total_revenue = Decimal(str(row.total_revenue))
+                    total_revenue = row.total_revenue or Decimal("0")
                     return {
                         "property_id": property_id,
                         "tenant_id": tenant_id,
